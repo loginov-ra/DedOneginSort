@@ -32,6 +32,15 @@
 #include <functional>
 #include <cstring>
 
+#define ASSERT(COND, MSG)                                       \
+    if(!(COND))                                                 \
+    {                                                           \
+        fprintf(stderr, "Error happened: %s\n", MSG);           \
+        fprintf(stderr, "Function: %s\n", __PRETTY_FUNCTION__); \
+        fprintf(stderr, "Line: %d\n", __LINE__);                \
+        assert(COND);                                           \
+    }                                                           
+
 /*!
  * Newline character in UTF-16
  */
@@ -180,7 +189,7 @@ private:
      */
     bool directionalCompare(const IntegratedString& that, size_t startLHS = 0, size_t startRHS = 0, int direction = 1) const
     {
-        assert(abs(direction) == 1);
+        ASSERT(abs(direction) == 1, "Directional comparator called with undefined direction (not +-1)");
         
         size_t indLHS = 0, indRHS = 0;
 
@@ -235,7 +244,7 @@ public:
      */
     char16_t operator [](size_t index) const
     {
-        assert(index < getSize());
+        ASSERT(index < getSize(), "Out of IntegratedString range");
         return ptr_[index];
     }
 
@@ -333,7 +342,7 @@ private:
         if (!sourceFile)
             return false;
 
-        assert(buffer_);
+        ASSERT(buffer_, "Invalid buffer before reading");
         size_t symbolsRead = fread(buffer_, sizeof(char16_t), nSymbols_, sourceFile);
         fclose(sourceFile);
         return symbolsRead == nSymbols_;
@@ -409,7 +418,7 @@ public:
     {
         nSymbols_ = utf16_file_len(filename);
         buffer_ = new char16_t[nSymbols_ + 2];
-
+        
         if (!readFile(filename))
         {
             fprintf(stderr, "Unable to read file: %s\n", filename);
@@ -463,8 +472,9 @@ public:
      */
     void printToFile(FILE* output) const
     {
-        assert(output);
-        //assert(!ferror(output)); ///!---!
+        ASSERT(output, "Invalid output file");
+        ASSERT(!ferror(output), "Corrupted output file");
+
         fwrite(buffer_, sizeof(char16_t), 1, output);
 
         for (size_t i = 0; i < nLines_; ++i)
@@ -489,7 +499,7 @@ public:
      */ 
     const IntegratedString& operator [](size_t index) const
     {
-        assert(index < nLines_);
+        ASSERT(index < nLines_, "Out of text lines range");
         return strings_[index];
     }
 
@@ -517,7 +527,7 @@ public:
      */
     void setOrder(const LineOrder& order)
     {
-        assert(order.lines_.size() == nLines_);
+        ASSERT(order.lines_.size() == nLines_, "Passed order has another number of lines");
         memcpy(strings_, order.lines_.data(), nLines_ * sizeof(IntegratedString));
     }
     
