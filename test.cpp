@@ -6,6 +6,20 @@
 #include <fstream>
 #include <algorithm>
 
+class WiderText : public Text
+{
+public:
+    WiderText(const char* filename):
+        Text(filename)
+    {}
+
+    void reverse()
+    {
+        IntegratedString* strings_ = __getUnsafeOrder();
+        std::reverse(strings_, strings_ + getNLines());
+    }
+};
+
 const size_t TEST_STR_SIZE = 256;
 
 size_t getNonEmptyLinesCount(const char* filename)
@@ -76,6 +90,29 @@ DEFINE_TEST(CheckSameLenSorted)
                  getNonEmptyLinesCount(outputFilename));
 }
 
+DEFINE_TEST(BufferReadablePlusAccess)
+    const char16_t* line = u"Здравствуйте, мы ваши тесты";
+    Text text;
+    text.loadFromBuffer(line, 5);
+    ASSERT_EQUAL(text[0][1], u'д');    
+}
+
+DEFINE_TEST(ProtectedUsage)
+    const char*  inputFilename = "../TEST.txt";
+    const char* outputFilename = "output.txt";
+    FILE* output = fopen(outputFilename, "w");
+
+    {
+        WiderText text(inputFilename);
+        text.reverse();
+        text.printToFile(output);
+    }
+
+    fclose(output);
+    ASSERT_EQUAL(getNonEmptyLinesCount(inputFilename),
+                 getNonEmptyLinesCount(outputFilename));
+}
+
 int main()
 {
     RUN_TEST(StrlenCorrectness);
@@ -83,4 +120,6 @@ int main()
     RUN_TEST(RewriteFile);
 	RUN_TEST(CheckProhibitedSymbols);
     RUN_TEST(CheckSameLenSorted);
+    RUN_TEST(BufferReadablePlusAccess);
+    RUN_TEST(ProtectedUsage);
 }

@@ -207,7 +207,7 @@ private:
         advanceUntilNotProhibited(that.ptr_, startRHS, that.getSize(), &indRHS, direction);
             
         return (indLHS >= getSize() && indRHS < that.getSize());
-    }
+    } 
     
 public:
     IntegratedString():
@@ -229,6 +229,16 @@ public:
         size_(size)
     {}
     
+    /*!
+     * Emulates string interface of operator []
+     * @param index Index of required element
+     */
+    char16_t operator [](size_t index) const
+    {
+        assert(index < getSize());
+        return ptr_[index];
+    }
+
     /*!
      * Constant string getter
      */
@@ -333,17 +343,17 @@ private:
      * Separates buffer into lines <br>/
      * Stores result in a form of InegratedString array
      */
-    void separateBufferIntoLines()
+    void separateBufferIntoLines(int needStartSymbol = 1)
     {
         nLines_ = utf16_count(buffer_, L'\n') + 1;
         strings_ = new IntegratedString[nLines_];
         
         size_t currLength = 0;
         size_t currLine = 0;
-        char16_t* currBeginning = buffer_ + 1;
+        char16_t* currBeginning = buffer_ + needStartSymbol;
         
         
-        for (size_t i = 1; i < nSymbols_; ++i)
+        for (size_t i = needStartSymbol; i < nSymbols_; ++i)
         {
             if (buffer_[i] != L'\n')
             {
@@ -373,6 +383,12 @@ private:
     
     Text(const Text& that)                   = delete;
     const Text& operator =(const Text& that) = delete;
+
+protected:
+    IntegratedString* __getUnsafeOrder()
+    {
+        return strings_;
+    }
 
 public:
     /*!
@@ -418,12 +434,12 @@ public:
         else
             nSymbols_ = size;
 
-        buffer_ = new char16_t[nSymbols_ = 2];
+        buffer_ = new char16_t[nSymbols_ + 2];
         memcpy(buffer_, buf, nSymbols_ * sizeof(char16_t));
-        separateBufferIntoLines();
+        separateBufferIntoLines(0);
         setOriginal();
     }
-
+    
     Text():
         buffer_(nullptr),
         nSymbols_(0),
@@ -467,6 +483,17 @@ public:
     }
     
     /*!
+     * Emulates operator [] in 2d arrays
+     * @param index Index of line required
+     * @return Constant reference to line
+     */ 
+    const IntegratedString& operator [](size_t index) const
+    {
+        assert(index < nLines_);
+        return strings_[index];
+    }
+
+    /*!
      * Sorts lines in text with std::sort
      * @tparam Comparator - Comparator type for IntegratedStrings
      * @param comp - given type comparator
@@ -480,7 +507,7 @@ public:
     /*!
      * @return Current line order for futher usage
      */
-    LineOrder getOrder()
+    LineOrder getOrder() const
     {
         return LineOrder(nLines_, strings_);
     }
@@ -501,6 +528,9 @@ public:
     {
         memcpy(strings_, original_, nLines_ * sizeof(IntegratedString));
     }
+
+    size_t getNLines()   const { return nLines_; }
+    size_t getNSymbols() const { return nSymbols_; }
 
     ~Text()
     {
