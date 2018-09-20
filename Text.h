@@ -59,7 +59,7 @@ int utf16_comp_le(char16_t c1, char16_t c2)
  * strlen for UTF-16
  * @return Number of characters in str
  */
-size_t utf16_strlen(char16_t* str)
+size_t utf16_strlen(const char16_t* str)
 {
     size_t currentLen = 0;
 
@@ -75,7 +75,7 @@ size_t utf16_strlen(char16_t* str)
  * @param symbol Symbol to find
  * @return number of given symbols in str
  */ 
-size_t utf16_count(char16_t* str, char16_t symbol)
+size_t utf16_count(const char16_t* str, char16_t symbol)
 {
     size_t answer = 0;
     size_t i = 0;
@@ -123,11 +123,11 @@ size_t utf16_file_len(const char* filename)
 class IntegratedString
 {
 public:
-    char16_t* ptr_; //!< Pointer to the beginning
-    size_t size_;   //!< Length of line
+    const char16_t* ptr_; //!< Pointer to the beginning
+    size_t size_;         //!< Length of line
     
     static constexpr const size_t    N_PROHIBITED_ = 11;              //!< Number of skipped symbols
-    static constexpr const char16_t*   PROHIBITED_ = u".,!:;\"?-() "; //!< Sipped symbols
+    static constexpr const char16_t*   PROHIBITED_ = u".,!:;\"?-() "; //!< Skipped symbols
     
     /*!
      * Tell if symbol is service and should be skipped during a sort
@@ -181,6 +181,12 @@ public:
             else if (comp_res > 0)
                 return false;
         } 
+        
+        while (indLHS < getSize() && isProhibitedSymbol(ptr_[startLHS + direction * indLHS]))
+            ++indLHS;
+        
+        while (indRHS < that.getSize() && isProhibitedSymbol(that.ptr_[startRHS + direction * indRHS]))
+            ++indRHS;
 
         return (indLHS >= getSize() && indRHS < that.getSize());
     }
@@ -195,12 +201,12 @@ public:
      * Construct from pointer to the end <br>
      * Uses utf16_strlen(ptr)
      */
-    explicit IntegratedString(char16_t* ptr):
+    explicit IntegratedString(const char16_t* ptr):
         ptr_(ptr),
         size_(utf16_strlen(ptr))
     {}
 
-    IntegratedString(char16_t* ptr, size_t size):
+    IntegratedString(const char16_t* ptr, size_t size):
         ptr_(ptr),
         size_(size)
     {}
@@ -380,7 +386,7 @@ public:
     void printToFile(FILE* output) const
     {
         assert(output);
-        uint16_t code = buffer_[0];
+        fwrite(buffer_, sizeof(char16_t), 1, output);
 
         for (size_t i = 0; i < nLines_; ++i)
         {
