@@ -122,7 +122,7 @@ size_t utf16_file_len(const char* filename)
  */
 class IntegratedString
 {
-public:
+private:
     const char16_t* ptr_; //!< Pointer to the beginning
     size_t size_;         //!< Length of line
     
@@ -142,6 +142,33 @@ public:
     }
     
     /*!
+     * Skip service symbol and advance pointer given
+     * Service function for comparator
+     */
+    bool skipProhibited(const char16_t* ptr, size_t start, size_t* ind, int direction) const
+    {
+        if (isProhibitedSymbol(ptr[start + direction * *ind]))
+        {
+            *ind += 1;
+            return true;
+        }
+
+        return false;
+    }
+    
+    /*!
+     * Moves index to direction order while symbol is service
+     * Service function for comparator
+     */
+    void advanceUntilNotProhibited(const char16_t* ptr, size_t start, size_t size, size_t* ind, int direction) const
+    {
+        while (*ind < size && isProhibitedSymbol(ptr[start + direction * (*ind)]))
+        {
+            *ind = *ind + 1;
+        }
+    }
+
+    /*!
      * \brief Directional UTF-16 string comparator
      * By choosing a direction goes from given starts and determines if <br>
      * resulting string is than given another got with the same way <br>
@@ -154,20 +181,14 @@ public:
     bool directionalCompare(const IntegratedString& that, size_t startLHS = 0, size_t startRHS = 0, int direction = 1) const
     {
         assert(abs(direction) == 1);
-
+        
         size_t indLHS = 0, indRHS = 0;
 
-        while (indLHS < getSize() && indRHS < getSize())
+        while (indLHS < getSize() && indRHS < that.getSize())
         {
-            if (isProhibitedSymbol(ptr_[startLHS + direction * indLHS]))
+            if (skipProhibited(     ptr_, startLHS, &indLHS, direction) ||
+                skipProhibited(that.ptr_, startRHS, &indRHS, direction))
             {
-                ++indLHS;
-                continue;
-            }
-            
-            if (isProhibitedSymbol(that.ptr_[startRHS + direction * indRHS]))
-            {
-                ++indRHS;
                 continue;
             }
 
@@ -182,12 +203,9 @@ public:
                 return false;
         } 
         
-        while (indLHS < getSize() && isProhibitedSymbol(ptr_[startLHS + direction * indLHS]))
-            ++indLHS;
-        
-        while (indRHS < that.getSize() && isProhibitedSymbol(that.ptr_[startRHS + direction * indRHS]))
-            ++indRHS;
-
+        advanceUntilNotProhibited(     ptr_, startLHS,      getSize(), &indLHS, direction);
+        advanceUntilNotProhibited(that.ptr_, startRHS, that.getSize(), &indRHS, direction);
+            
         return (indLHS >= getSize() && indRHS < that.getSize());
     }
     
@@ -198,7 +216,7 @@ public:
     {}
     
     /*!
-     * Construct from pointer to the end <br>
+     * Construct from pointer until the end <br>
      * Uses utf16_strlen(ptr)
      */
     explicit IntegratedString(const char16_t* ptr):
@@ -289,7 +307,6 @@ bool reverseStringComparator(const IntegratedString& lhs, const IntegratedString
 class Text
 {
 private:
-    FILE* sourceFile_; //!> Source file
     char16_t* buffer_; //!> Place to read a whole file
     size_t nSymbols_;  //!> File size in symbols
     size_t nLines_;    //!> Number of lines in file
@@ -298,20 +315,22 @@ private:
     IntegratedString* original_; //!> Original order not to be killed
     
     /*!
-     * Open file and read to already created bufer
+     * Open file and read to already created buffer
      */
     bool readFile(const char* filename)
     {
-        sourceFile_ = fopen(filename, "r");
-        if (!sourceFile_)
+        FILE* sourceFile = fopen(filename, "r");
+        if (!sourceFile)
             return false;
 
         assert(buffer_);
-        return fread(buffer_, sizeof(char16_t), nSymbols_, sourceFile_) == nSymbols_; 
+        size_t symbolsRead = fread(buffer_, sizeof(char16_t), nSymbols_, sourceFile);
+        fclose(sourceFile);
+        return symbolsRead == nSymbols_;
     }
     
     /*!
-     * Separates buffer into lines <br>
+     * Separates buffer into lines <br>/
      * Stores result in a form of InegratedString array
      */
     void separateBufferIntoLines()
@@ -351,34 +370,77 @@ private:
         while (strings_[nLines_ - 1].getSize() == 0 && nLines_ > 0)
             --nLines_;
     }
+    
+    Text(const Text& that)                   = delete;
+    const Text& operator =(const Text& that) = delete;
 
 public:
+    /*!
+     * Makes current state of lines the original text
+     */
+    void setOriginal()
+    {
+        original_ = new IntegratedString[nLines_];
+        memcpy(original_, strings_, nLines_ * sizeof(IntegratedString));
+    }
+    
+    /*!
+     * Reads file in buffer <br>
+     * Then separates it into lines and stores inside a Text-object
+     * @param filename Path to a file to read
+     */
+    void loadFromFile(const char* filename)
+    {
+        nSymbols_ = utf16_file_len(filename);
+        buffer_ = new char16_t[nSymbols_ + 2];
+
+        if (!readFile(filename))
+        {
+            fprintf(stderr, "Unable to read file: %s\n", filename);
+            assert(false);
+        }
+
+        separateBufferIntoLines();
+        shrinkEmptyLines();
+        setOriginal();
+    }
+    
+    /*!
+     * Copies buffer to store the same information <br>
+     * Separates into lines
+     * @param buf Buffer to copy
+     * @param size Number of symbols to copy, -1 for the whole buffer
+     */ 
+    void loadFromBuffer(const char16_t* buf, int size = -1)
+    {
+        if (size < 0)
+            nSymbols_ = utf16_strlen(buf);
+        else
+            nSymbols_ = size;
+
+        buffer_ = new char16_t[nSymbols_ = 2];
+        memcpy(buffer_, buf, nSymbols_ * sizeof(char16_t));
+        separateBufferIntoLines();
+        setOriginal();
+    }
+
+    Text():
+        buffer_(nullptr),
+        nSymbols_(0),
+        nLines_(0),
+        strings_(nullptr)
+    {}
+
     /*!
      * Main constructor. <br>
      * Reads whole file and structurizes it
      */
     Text(const char* filename):
-        sourceFile_(nullptr),
-        buffer_(nullptr),
-        nSymbols_(utf16_file_len(filename)),
-        nLines_(0),
-        strings_(nullptr)
+        Text()
     {
-        buffer_ = new char16_t[nSymbols_ + 2];
-        
-        if (!readFile(filename))
-        { 
-            fprintf(stderr, "Unable to read file: %s\n", filename);
-            return;
-        }
-
-        separateBufferIntoLines();
-        shrinkEmptyLines();
-
-        original_ = new IntegratedString[nLines_];
-        memcpy(original_, strings_, nLines_ * sizeof(IntegratedString));
+        loadFromFile(filename);
     }
-    
+
     /*!
      * Prints contents in current order to provided file line by line
      * @param output File to print in
@@ -386,6 +448,7 @@ public:
     void printToFile(FILE* output) const
     {
         assert(output);
+        //assert(!ferror(output)); ///!---!
         fwrite(buffer_, sizeof(char16_t), 1, output);
 
         for (size_t i = 0; i < nLines_; ++i)
@@ -400,7 +463,7 @@ public:
      */
     bool isOk() const
     {
-        return sourceFile_ && buffer_ && strings_;
+        return buffer_ && strings_;
     }
     
     /*!
@@ -457,12 +520,6 @@ public:
         {
             delete[] strings_;
             strings_ = nullptr;
-        }
-
-        if (sourceFile_)
-        {
-            fclose(sourceFile_);
-            sourceFile_ = nullptr;
         }
     }
 };
